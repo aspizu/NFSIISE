@@ -1,6 +1,7 @@
 import './style.css';
 import { cacheArchive, clearCachedArchive, getCachedArchive } from './archive-store.js';
 import { mountGameArchive } from './game-archive.js';
+import { startGamepadPolling } from './gamepad.js';
 
 const canvas = document.querySelector('#canvas');
 const display = document.querySelector('#display');
@@ -277,6 +278,7 @@ globalThis.Module = {
   },
   onRuntimeInitialized() {
     setStatus('');
+    startGamepadPolling(globalThis.Module);
     requestAnimationFrame(showWebFrame);
   },
   onAbort(reason) {

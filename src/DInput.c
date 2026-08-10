@@ -41,6 +41,9 @@
 
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL.h>
+#ifdef __EMSCRIPTEN__
+	#include <emscripten/emscripten.h>
+#endif
 
 #define MOUSE        0x6F1D2B60
 #define JOYSTICK     0x6F1D2B70
@@ -53,6 +56,64 @@
 static const char *g_joyPaths[2];
 static SDL_threadID g_mainThread;
 static uint8_t g_buttonsPressedCount[2][32];
+
+#ifdef __EMSCRIPTEN__
+	#define WEB_GAMEPAD_SLOTS 2
+	#define WEB_GAMEPAD_AXES 6
+	#define WEB_GAMEPAD_STANDARD_MAPPING 1
+
+	typedef struct
+	{
+		uint32_t sequence;
+		uint32_t connected;
+		int32_t axes[WEB_GAMEPAD_AXES];
+		uint32_t buttons;
+		uint32_t dpad;
+		uint32_t flags;
+	} WebGamepadState;
+
+	static WebGamepadState g_webGamepads[WEB_GAMEPAD_SLOTS];
+
+	EMSCRIPTEN_KEEPALIVE uint32_t nfsWebGamepadStateBuffer(void)
+	{
+		return (uint32_t)(uintptr_t)g_webGamepads;
+	}
+	EMSCRIPTEN_KEEPALIVE uint32_t nfsWebGamepadStateWords(void)
+	{
+		return sizeof(WebGamepadState) / sizeof(uint32_t);
+	}
+
+	static BOOL readWebGamepadState(int32_t joyIdx, WebGamepadState *snapshot)
+	{
+		WebGamepadState *state;
+		uint32_t sequenceBefore, sequenceAfter;
+		int32_t attempt, i;
+
+		if (joyIdx < 0 || joyIdx >= WEB_GAMEPAD_SLOTS)
+			return false;
+
+		state = &g_webGamepads[joyIdx];
+		for (attempt = 0; attempt < 4; ++attempt)
+		{
+			sequenceBefore = __atomic_load_n(&state->sequence, __ATOMIC_ACQUIRE);
+			if (sequenceBefore & 1)
+				continue;
+
+			snapshot->connected = __atomic_load_n(&state->connected, __ATOMIC_RELAXED);
+			for (i = 0; i < WEB_GAMEPAD_AXES; ++i)
+				snapshot->axes[i] = __atomic_load_n(&state->axes[i], __ATOMIC_RELAXED);
+			snapshot->buttons = __atomic_load_n(&state->buttons, __ATOMIC_RELAXED);
+			snapshot->dpad = __atomic_load_n(&state->dpad, __ATOMIC_RELAXED);
+			snapshot->flags = __atomic_load_n(&state->flags, __ATOMIC_RELAXED);
+
+			sequenceAfter = __atomic_load_n(&state->sequence, __ATOMIC_ACQUIRE);
+			if (sequenceBefore == sequenceAfter)
+				return snapshot->connected != 0;
+		}
+
+		return false;
+	}
+#endif
 
 extern SDL_Window *sdlWin;
 extern int32_t winWidth, winHeight;
@@ -182,6 +243,7 @@ static void maybeInitEffect(DirectInputDevice *dev, DirectInputEffect *eff)
 	}
 }
 
+#ifndef __EMSCRIPTEN__
 static void ensureJoyOpen(DirectInputDevice *dev)
 {
 	int32_t joyIdx = dev->guid.b;
@@ -314,6 +376,7 @@ static void ensureJoyOpen(DirectInputDevice *dev)
 			maybeInitEffect(dev, dev->effects[i]);
 	}
 }
+#endif
 
 static void maybeRestartEffect(DirectInputEffect *eff)
 {
@@ -627,6 +690,126 @@ MAYBE_STATIC REALIGN STDCALL uint32_t Unacquire(DirectInputDevice **this)
 //	fprintf(stderr, "Unacquire: %u\n", (*this)->ref);
 	return 0;
 }
+#ifdef __EMSCRIPTEN__
+static uint8_t webGamepadButton(const WebGamepadState *state, int32_t button)
+{
+	return button >= 0 && button < 32 && (state->buttons & (1u << button)) != 0;
+}
+
+static void releaseWebGamepadKeys(DirectInputDevice *dev, int32_t joyIdx)
+{
+	int32_t i;
+
+	simulateKey(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0, &dev->escPressed);
+	simulateKey(SDLK_F11 + joyIdx, SDL_SCANCODE_F11 + joyIdx, 0, &dev->resetPressed);
+	for (i = 0; i < 4; ++i)
+		simulateKey(SDLK_RIGHT + i, SDL_SCANCODE_RIGHT + i, 0, &dev->dpadPressed[i]);
+}
+
+static uint32_t getWebGamepadDeviceState(DirectInputDevice *dev, DIJOYSTATE *joyState)
+{
+	WebGamepadState state = {0};
+	const int32_t joyIdx = dev->guid.b;
+	const int32_t numButtons = 32;
+	const int32_t numAxes = WEB_GAMEPAD_AXES;
+	BOOL standardMapping;
+	int32_t i;
+
+	if (!readWebGamepadState(joyIdx, &state))
+	{
+		releaseWebGamepadKeys(dev, joyIdx);
+		if (joyIdx >= 0 && joyIdx < WEB_GAMEPAD_SLOTS)
+			memset(g_buttonsPressedCount[joyIdx], 0, sizeof g_buttonsPressedCount[joyIdx]);
+		return 0;
+	}
+	standardMapping = (state.flags & WEB_GAMEPAD_STANDARD_MAPPING) != 0;
+
+	if (joystickEscButton[joyIdx] >= 0 && joystickEscButton[joyIdx] < numButtons)
+	{
+		simulateKey(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, webGamepadButton(&state, joystickEscButton[joyIdx]), &dev->escPressed);
+	}
+	if (joystickResetButton[joyIdx] >= 0 && joystickResetButton[joyIdx] < numButtons)
+	{
+		simulateKey(SDLK_F11 + joyIdx, SDL_SCANCODE_F11 + joyIdx, webGamepadButton(&state, joystickResetButton[joyIdx]), &dev->resetPressed);
+	}
+
+	if (standardMapping)
+	{
+		for (i = 0; i < 4; ++i)
+		{
+			simulateKey(SDLK_RIGHT + i, SDL_SCANCODE_RIGHT + i, (state.dpad >> i) & 1, &dev->dpadPressed[i]);
+		}
+	}
+	else for (i = 0; i < 4; ++i)
+	{
+		if (joystickDPadButtons[joyIdx][i] >= 0 && joystickDPadButtons[joyIdx][i] < numButtons)
+		{
+			simulateKey(SDLK_RIGHT + i, SDL_SCANCODE_RIGHT + i, webGamepadButton(&state, joystickDPadButtons[joyIdx][i]), &dev->dpadPressed[i]);
+		}
+	}
+
+	/* Delay button input while assigning controls so an analog trigger can win
+	 * over the digital button reported for that same trigger. */
+	const BOOL delayButtons = inControlAssignMode;
+	for (i = 0; i < numButtons; ++i)
+	{
+		BOOL ignore = false;
+		int32_t j;
+		if (i == joystickEscButton[joyIdx] || i == joystickResetButton[joyIdx])
+		{
+			ignore = true;
+		}
+		else if (standardMapping && i >= 12 && i <= 15)
+		{
+			ignore = true;
+		}
+		else for (j = 0; j < 4; ++j)
+		{
+			if (!standardMapping && i == joystickDPadButtons[joyIdx][j])
+				ignore = true;
+		}
+
+		if (!ignore)
+		{
+			const uint8_t maxPressedCount = 50;
+			const uint8_t pressed = webGamepadButton(&state, i);
+			uint8_t *pressedCount = &g_buttonsPressedCount[joyIdx][i];
+			if (pressed)
+			{
+				if (delayButtons && *pressedCount < maxPressedCount)
+					*pressedCount += 1;
+			}
+			else if (*pressedCount > 0)
+			{
+				*pressedCount -= 1;
+			}
+			if ((!delayButtons && *pressedCount == 0) || *pressedCount == maxPressedCount)
+				joyState->buttons[i] = pressed << 7;
+		}
+	}
+
+	const BOOL isGameThread = (g_mainThread != SDL_ThreadID());
+	if (isGameThread || delayButtons || (!standardMapping && !joystickDisableAxesInMenu))
+	{
+		for (i = 0; i < numAxes; ++i)
+		{
+			const int32_t sourceAxis = joystickAxes[joyIdx][i];
+			int32_t *axis;
+			if (sourceAxis < 0 || sourceAxis >= WEB_GAMEPAD_AXES)
+				continue;
+
+			axis = &joyState->axes[i < 3 ? i : i + 2];
+			*axis = (uint16_t)state.axes[sourceAxis] ^ 0x8000;
+			if (joystickAxes[joyIdx][i + 6] > 0)
+				*axis = (*axis >> 1) + 32768;
+			else if (joystickAxes[joyIdx][i + 6] < 0)
+				*axis = 65535 - (*axis >> 1);
+		}
+	}
+
+	return 0;
+}
+#endif
 MAYBE_STATIC REALIGN STDCALL uint32_t GetDeviceState(DirectInputDevice **this, uint32_t cbData, void *data)
 {
 	/* Joystick only */
@@ -636,6 +819,10 @@ MAYBE_STATIC REALIGN STDCALL uint32_t GetDeviceState(DirectInputDevice **this, u
 	DIJOYSTATE *joyState = (DIJOYSTATE *)data;
 	SDL_memset4(joyState->axes, 0x8000, 8);
 	memset(joyState->buttons, 0, sizeof joyState->buttons);
+
+#ifdef __EMSCRIPTEN__
+	return getWebGamepadDeviceState(*this, joyState);
+#else
 
 	SDL_Joystick *joy = (*this)->joy;
 	if (!joy)
@@ -752,6 +939,7 @@ MAYBE_STATIC REALIGN STDCALL uint32_t GetDeviceState(DirectInputDevice **this, u
 	}
 
 	return 0;
+#endif
 }
 MAYBE_STATIC REALIGN STDCALL uint32_t GetDeviceData(DirectInputDevice **this, uint32_t cbObjectData, DIDEVICEOBJECTDATA *rgdod, uint32_t *pdwInOut, uint32_t dwFlags)
 {
@@ -894,9 +1082,11 @@ MAYBE_STATIC REALIGN STDCALL uint32_t Poll(DirectInputDevice **this)
 {
 	/* Joystick only */
 
+#ifndef __EMSCRIPTEN__
 	SDL_JoystickUpdate();
 
 	ensureJoyOpen(*this);
+#endif
 
 	return 0;
 }
@@ -984,13 +1174,11 @@ REALIGN STDCALL uint32_t DirectInputCreateA_wrap(MAYBE_THIS void *hInstance, uin
 	dinput_game_thread = this;
 #endif
 
-	#ifdef __EMSCRIPTEN__
-	const uint32_t sdlInputSubsystems = SDL_INIT_JOYSTICK;
-	#else
+	#ifndef __EMSCRIPTEN__
 	const uint32_t sdlInputSubsystems = SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC;
-	#endif
 	if (SDL_Init(sdlInputSubsystems) < 0)
 		fprintf(stderr, "SDL joystick and haptic init failed: %s\n", SDL_GetError());
+	#endif
 
 	g_mainThread = SDL_ThreadID();
 
