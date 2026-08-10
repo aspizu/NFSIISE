@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Need For Speed II SE</title>
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #ddd;
+      font: 14px system-ui, sans-serif;
+    }
+    #canvas, #display {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: 0;
+    }
+    #canvas {
+      z-index: 1;
+      opacity: 0;
+    }
+    #display {
+      z-index: 0;
+      pointer-events: none;
+    }
+    #status {
+      position: fixed;
+      left: 12px;
+      bottom: 10px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      background: rgb(0 0 0 / 70%);
+      pointer-events: none;
+      z-index: 2;
+    }
+    #status:empty {
+      display: none;
+    }
+    #start {
+      position: fixed;
+      inset: 50% auto auto 50%;
+      translate: -50% -50%;
+      padding: 12px 20px;
+      border: 1px solid #aaa;
+      border-radius: 5px;
+      background: #222;
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+      z-index: 2;
+    }
+    #start:disabled {
+      cursor: wait;
+      opacity: .6;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="display"></canvas>
+  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="status">Loading…</div>
+  <button id="start" type="button" disabled>Start game</button>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const display = document.getElementById('display');
+    const displayContext = display.getContext('2d', { alpha: false });
+    const staging = document.createElement('canvas');
+    const stagingContext = staging.getContext('2d', { alpha: false });
+    const status = document.getElementById('status');
+    const start = document.getElementById('start');
+    let shownFrameSequence = 0;
+    let framePixels;
+
+    function showWebFrame() {
+      if (Module._nfsWebFrameSequence) {
+        const sequenceBefore = Module._nfsWebFrameSequence();
+        if (!(sequenceBefore & 1) && sequenceBefore !== shownFrameSequence) {
+          const framePointer = Module._nfsWebFrameBuffer();
+          const width = Module._nfsWebFrameWidth();
+          const height = Module._nfsWebFrameHeight();
+          const size = width * height * 4;
+          if (framePointer && size) {
+            if (!framePixels || framePixels.length !== size)
+              framePixels = new Uint8ClampedArray(size);
+            framePixels.set(HEAPU8.subarray(framePointer, framePointer + size));
+            const sequenceAfter = Module._nfsWebFrameSequence();
+            if (sequenceBefore === sequenceAfter) {
+              if (display.width !== width || display.height !== height) {
+                display.width = staging.width = width;
+                display.height = staging.height = height;
+              }
+              stagingContext.putImageData(new ImageData(framePixels, width, height), 0, 0);
+              displayContext.setTransform(1, 0, 0, -1, 0, height);
+              displayContext.drawImage(staging, 0, 0);
+              shownFrameSequence = sequenceAfter;
+            }
+          }
+        }
+      }
+      requestAnimationFrame(showWebFrame);
+    }
+
+    var Module = {
+      canvas,
+      preRun: [function () {
+        const settingsPath = '/home/web_user/.nfs2se';
+        const startupDependency = 'nfs2se-startup';
+        FS.mkdirTree(settingsPath);
+        FS.mount(IDBFS, { autoPersist: true }, settingsPath);
+        addRunDependency(startupDependency);
+        FS.syncfs(true, function (error) {
+          if (error)
+            console.error('Could not load saved NFSIISE settings:', error);
+          start.disabled = false;
+          status.textContent = 'Ready';
+        });
+        start.addEventListener('click', function () {
+          start.hidden = true;
+          status.textContent = 'Starting…';
+          canvas.focus();
+          removeRunDependency(startupDependency);
+        }, { once: true });
+      }],
+      print: console.log,
+      printErr: console.error,
+      setStatus(text) {
+        status.textContent = text;
+      },
+      monitorRunDependencies(left) {
+        this.setStatus(left ? `Loading… (${left})` : 'Starting…');
+      },
+      onRuntimeInitialized() {
+        this.setStatus('');
+        requestAnimationFrame(showWebFrame);
+      }
+    };
+
+    window.addEventListener('error', function (event) {
+      status.textContent = event.message || 'The game stopped with an error.';
+    });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

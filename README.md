@@ -94,6 +94,46 @@ sudo apt install gcc-multilib
 * create symlink to unpacked `SDL2-*` directory into `src/Android/app/jni/SDL`,
 * run `./compile_nfs android` or `./compile_nfs android install`.
 
+#### WebAssembly:
+The Vite app is the recommended browser build. It does not put copyrighted game data in the built site. Install Emscripten 3.1.54 or newer, Node.js 20.19 or newer, and npm. The port is tested with Emscripten 6.0.6. On Apple Silicon, Homebrew can install Emscripten with `brew install emscripten`.
+
+Build the WebAssembly game and the static site:
+
+```sh
+./compile_nfs web
+cd src/Web
+npm install
+npm run build
+```
+
+The static site is written to `build/web`. Test it with the headers needed by WebAssembly threads:
+
+```sh
+cd src/Web
+npm run preview
+```
+
+On first run, the page asks for one ZIP file containing the original Special Edition `fedata` and `gamedata` folders. The ZIP may have one outer folder. File names are mapped to lower case in the browser. The ZIP is kept as a Blob in IndexedDB and is not sent to a server. It is expanded into the game file system on each page load, while saves and settings are kept in a separate IndexedDB file system.
+
+A deployed static host must send these headers for every app file:
+
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Resource-Policy: same-origin
+```
+
+The older self-contained browser build is still available. Copy `fedata` and `gamedata` into `Need For Speed II SE`, then run:
+
+```sh
+./compile_nfs wasm
+python3 src/Wasm/serve.py build/wasm
+```
+
+That older build creates a roughly 523 MB browser data file. Both browser builds use the C++ translation, SDL2, pthreads, and WebGL through the GLES2 renderer. The Vite app sends the game mixer through Web Audio. Networking and haptic feedback are disabled.
+
+The renderer copies each finished worker-side WebGL frame through shared WebAssembly memory. This works in Chromium but costs CPU time. Splitting the translated game loop into browser callbacks is the better long-term fix.
+
 ## Run:
 
 * Copy `fedata` and `gamedata` directories from the Need For Speed™ II SE original CD-ROM into `Need For Speed II SE` directory.

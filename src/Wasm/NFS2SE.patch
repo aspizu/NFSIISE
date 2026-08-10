@@ -1,0 +1,22 @@
+--- Cpp/NFS2SE.cpp
++++ Cpp/NFS2SE.cpp
+@@ -14,12 +14,19 @@
+ 
+ using namespace std;
+ 
++#ifdef __EMSCRIPTEN__
++static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
++	"This game is compatible only with little-endian CPUs!");
++static_assert(sizeof(void *) == 4,
++	"This game is compatible only with 32-bit address spaces!");
++#else
+ #if !defined(__BYTE_ORDER) || !defined(__LITTLE_ENDIAN) || (__BYTE_ORDER != __LITTLE_ENDIAN)
+ 	#error "This game is compatible only with little-endian CPUs!"
+ #endif
+ #if !defined(__WORDSIZE) || (__WORDSIZE != 32)
+ 	#error "This game is compatible only with 32-bit CPUs!"
+ #endif
++#endif
+ #if defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+ 	#define CPU_X86
+ #endif

@@ -1,0 +1,205 @@
+:root {
+  color: #f5f5f5;
+  background: #0b0b0b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+#canvas,
+#display {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#canvas {
+  z-index: 1;
+  opacity: 0;
+  outline: 0;
+}
+
+#display {
+  z-index: 0;
+  background: #000;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.setup {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  align-items: start;
+  justify-items: start;
+  padding: 32px;
+  background: #0b0b0b;
+}
+
+.setup[hidden] {
+  display: none;
+}
+
+.setup-card {
+  width: min(420px, calc(100vw - 64px));
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.setup-copy {
+  margin: 8px 0 20px;
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+code {
+  color: #ddd;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  color: #111;
+  background: #f2f2f2;
+}
+
+.secondary {
+  color: #eee;
+  border-color: #3a3a3a;
+  background: #202020;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.fullscreen-control {
+  position: fixed;
+  z-index: 5;
+  top: 24px;
+  right: 24px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+:fullscreen .fullscreen-control {
+  display: none;
+}
+
+.archive-detail,
+.error {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.archive-detail {
+  color: #bbb;
+}
+
+.error {
+  color: #ff8f87;
+}
+
+.error:empty,
+.archive-detail:empty {
+  display: none;
+}
+
+progress {
+  width: 100%;
+  height: 4px;
+  margin-top: 16px;
+  accent-color: #eee;
+}
+
+.status {
+  position: fixed;
+  z-index: 4;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  color: #aaa;
+  background: rgb(0 0 0 / 80%);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.status:empty {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .setup {
+    padding: 20px;
+  }
+
+  .setup-card {
+    width: calc(100vw - 40px);
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .fullscreen-control {
+    top: 12px;
+    right: 12px;
+  }
+}

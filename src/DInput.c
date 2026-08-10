@@ -984,7 +984,12 @@ REALIGN STDCALL uint32_t DirectInputCreateA_wrap(MAYBE_THIS void *hInstance, uin
 	dinput_game_thread = this;
 #endif
 
-	if (SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
+	#ifdef __EMSCRIPTEN__
+	const uint32_t sdlInputSubsystems = SDL_INIT_JOYSTICK;
+	#else
+	const uint32_t sdlInputSubsystems = SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC;
+	#endif
+	if (SDL_Init(sdlInputSubsystems) < 0)
 		fprintf(stderr, "SDL joystick and haptic init failed: %s\n", SDL_GetError());
 
 	g_mainThread = SDL_ThreadID();

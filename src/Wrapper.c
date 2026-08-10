@@ -293,7 +293,12 @@ static void initializeSDL2()
 	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 
-	if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
+#ifdef __EMSCRIPTEN__
+	const uint32_t sdlSubsystems = SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+#else
+	const uint32_t sdlSubsystems = SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+#endif
+	if (SDL_Init(sdlSubsystems) < 0)
 		fprintf(stderr, "SDL init failed: %s\n", SDL_GetError());
 }
 
@@ -311,6 +316,14 @@ void WrapperInit(void)
 #endif
 	FILE *f = NULL;
 
+#ifdef __EMSCRIPTEN__
+	if (chdir("/NFSIISE"))
+	{
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, "Cannot open the WebAssembly game-data directory.", NULL);
+		exit(-1);
+	}
+#endif
+
 	SDL_JoystickEventState(SDL_IGNORE);
 	SDL_ShowCursor(false);
 
@@ -325,6 +338,8 @@ void WrapperInit(void)
 
 #if defined(WIN32)
 	const char *homeDir = getenv("AppData");
+#elif defined(__EMSCRIPTEN__)
+	const char *homeDir = "/home/web_user";
 #elif defined(__ANDROID__)
 	const char *homeDir = SDL_AndroidGetInternalStoragePath();
 #else
@@ -524,6 +539,11 @@ void WrapperInit(void)
 		fclose(f);
 	}
 
+#ifdef __EMSCRIPTEN__
+	/* Browsers allow fullscreen only after a user gesture. */
+	startInFullScreen = false;
+#endif
+
 #ifndef OPENGL1X
 # ifdef GLES2
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -554,6 +574,8 @@ void WrapperInit(void)
 	{
 #if defined WIN32
 		SetThreadAffinityMask(GetCurrentThread(), 1);
+#elif defined(__EMSCRIPTEN__)
+		/* The browser owns WebAssembly thread placement. */
 #elif !defined(linux)
 		#warning "TODO: thread affinity"
 #else
@@ -722,7 +744,14 @@ REALIGN void free_wrap(void *ptr)
 {
 	free(ptr);
 }
+#ifdef __EMSCRIPTEN__
+REALIGN int32_t time_wrap(time_t *timer)
+{
+	return (int32_t)time(timer);
+}
+#else
 REALIGN time_t time_wrap(time_t *timer)
 {
 	return time(timer);
 }
+#endif

@@ -5,6 +5,11 @@
 #include <SDL2/SDL_stdinc.h>
 #include <SDL2/SDL_video.h>
 
+#ifdef __EMSCRIPTEN__
+# include <emscripten/emscripten.h>
+# include <emscripten/html5.h>
+#endif
+
 #ifdef GLES2
 # include <SDL2/SDL_opengles2.h>
 #else
@@ -245,7 +250,33 @@ static uint8_t *g_lfb, g_textureMem[TextureMem], g_fogTable[0x10000];
 static uint32_t *g_palette, g_tmpTexture[0x400];
 static uint32_t g_trianglesCount;
 
+#ifdef __EMSCRIPTEN__
+static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE g_glCtx;
+static uint8_t *g_webFrameBuffer;
+static uint32_t g_webFrameBufferSize;
+static uint32_t g_webFrameWidth;
+static uint32_t g_webFrameHeight;
+static uint32_t g_webFrameSequence;
+
+EMSCRIPTEN_KEEPALIVE uint32_t nfsWebFrameBuffer(void)
+{
+	return (uint32_t)(uintptr_t)g_webFrameBuffer;
+}
+EMSCRIPTEN_KEEPALIVE uint32_t nfsWebFrameWidth(void)
+{
+	return g_webFrameWidth;
+}
+EMSCRIPTEN_KEEPALIVE uint32_t nfsWebFrameHeight(void)
+{
+	return g_webFrameHeight;
+}
+EMSCRIPTEN_KEEPALIVE uint32_t nfsWebFrameSequence(void)
+{
+	return __atomic_load_n(&g_webFrameSequence, __ATOMIC_ACQUIRE);
+}
+#else
 static SDL_GLContext g_glCtx;
+#endif
 
 extern BOOL keepAspectRatio, needRecreateGl, windowResized, linearFiltering, fixedFramebufferSize, framebufferLinearFiltering;
 extern int32_t vSync, winWidth, winHeight, initialWinWidth, initialWinHeight;
@@ -517,7 +548,27 @@ static void useGameProgram(BOOL gameProgram)
 
 static void createContext()
 {
+#ifdef __EMSCRIPTEN__
+	EmscriptenWebGLContextAttributes attributes;
+	emscripten_webgl_init_context_attributes(&attributes);
+	attributes.alpha = false;
+	attributes.majorVersion = 1;
+	attributes.minorVersion = 0;
+	attributes.enableExtensionsByDefault = true;
+	attributes.explicitSwapControl = true;
+	attributes.proxyContextToMainThread = EMSCRIPTEN_WEBGL_CONTEXT_PROXY_DISALLOW;
+
+	g_glCtx = emscripten_webgl_create_context("#canvas", &attributes);
+	if (g_glCtx > 0 && emscripten_webgl_make_context_current(g_glCtx) != EMSCRIPTEN_RESULT_SUCCESS)
+	{
+		emscripten_webgl_destroy_context(g_glCtx);
+		g_glCtx = 0;
+	}
+	if (g_glCtx > 0)
+		puts("WebAssembly WebGL context is ready.");
+#else
 	g_glCtx = SDL_GL_CreateContext(sdlWin);
+#endif
 	if (!g_glCtx)
 	{
 		contextError = true;
@@ -599,7 +650,11 @@ static void createContext()
 #endif
 
 	if (vSync >= 0)
+#ifdef __EMSCRIPTEN__
+		;
+#else
 		SDL_GL_SetSwapInterval(vSync);
+#endif
 
 	glEnable(GL_SCISSOR_TEST);
 	glDisable(GL_DITHER);
@@ -635,8 +690,13 @@ static void destroyContext()
 	glDeleteShader(g_fShaderDisp);
 	glDeleteShader(g_vShaderDisp);
 
+#ifdef __EMSCRIPTEN__
+	emscripten_webgl_destroy_context(g_glCtx);
+	g_glCtx = 0;
+#else
 	SDL_GL_DeleteContext(g_glCtx);
 	g_glCtx = NULL;
+#endif
 
 	g_trianglesCount = 0;
 }
@@ -814,10 +874,26 @@ REALIGN STDCALL void grChromakeyValue(GrColor_t value)
 REALIGN STDCALL void grBufferSwap(int swap_interval)
 {
 // 	fprintf(stderr, "grBufferSwap: [%d]\n", g_trianglesCount);
+#if defined(__EMSCRIPTEN__) && !defined(NDEBUG)
+	static uint32_t webFrameCount;
+	const uint32_t webFrameTriangles = g_trianglesCount;
+#endif
 
 	drawTriangles();
 
 	useGameProgram(false);
+
+#ifdef __EMSCRIPTEN__
+	int32_t drawingWidth, drawingHeight;
+	if (emscripten_webgl_get_drawing_buffer_size(g_glCtx, &drawingWidth, &drawingHeight) == EMSCRIPTEN_RESULT_SUCCESS &&
+		drawingWidth > 0 && drawingHeight > 0 &&
+		(drawingWidth != winWidth || drawingHeight != winHeight))
+	{
+		winWidth = drawingWidth;
+		winHeight = drawingHeight;
+		windowResized = true;
+	}
+#endif
 
 	GLint viewportSize[4] = {};
 	glGetIntegerv(GL_VIEWPORT, viewportSize);
@@ -855,7 +931,37 @@ REALIGN STDCALL void grBufferSwap(int swap_interval)
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	glBindTexture(GL_TEXTURE_2D, 0);
 
+#ifdef __EMSCRIPTEN__
+	const uint32_t webFrameSize = winWidth * winHeight * 4;
+	if (webFrameSize > g_webFrameBufferSize)
+	{
+		uint8_t *newFrameBuffer = (uint8_t *)realloc(g_webFrameBuffer, webFrameSize);
+		if (newFrameBuffer)
+		{
+			g_webFrameBuffer = newFrameBuffer;
+			g_webFrameBufferSize = webFrameSize;
+		}
+	}
+	if (g_webFrameBufferSize >= webFrameSize)
+	{
+		__atomic_add_fetch(&g_webFrameSequence, 1, __ATOMIC_RELEASE);
+		glReadPixels(0, 0, winWidth, winHeight, GL_RGBA, GL_UNSIGNED_BYTE, g_webFrameBuffer);
+		g_webFrameWidth = winWidth;
+		g_webFrameHeight = winHeight;
+		__atomic_add_fetch(&g_webFrameSequence, 1, __ATOMIC_RELEASE);
+	}
+	#ifndef NDEBUG
+	EMSCRIPTEN_RESULT commitResult = emscripten_webgl_commit_frame();
+	++webFrameCount;
+	if (webFrameCount == 1 || webFrameCount == 300)
+		printf("WebAssembly frame %u: %u triangles, commit %d, GL error 0x%X.\n",
+			webFrameCount, webFrameTriangles, commitResult, glGetError());
+	#else
+	emscripten_webgl_commit_frame();
+	#endif
+#else
 	SDL_GL_SwapWindow(sdlWin);
+#endif
 
 	if (needRecreateGl)
 	{

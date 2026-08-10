@@ -10,3 +10,8 @@ src/Android/.gradle
 src/Android/app/build
 src/Android/app/jni/SDL
 src/Android/app/src/main/AndroidManifest.xml
+build/wasm
+build/web
+build/web-obj
+build/web-public
+src/Web/node_modules
