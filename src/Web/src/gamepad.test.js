@@ -89,6 +89,17 @@ test('keeps two stable slots and clears lost pads', () => {
   assert.equal(readSlot(module, 0).sequence & 1, 0);
 });
 
+test('ignores null slots returned by navigator.getGamepads', () => {
+  const module = testModule();
+  const pads = [null, gamepad(1, { axes: [0.5] }), null];
+  const poller = createGamepadPoller(module, () => pads);
+
+  assert.doesNotThrow(() => poller.poll());
+  assert.equal(readSlot(module, 0).connected, 1);
+  assert.equal(readSlot(module, 0).axes[0], axisToInt16(0.5));
+  assert.equal(readSlot(module, 1).connected, 0);
+});
+
 test('passes through six raw axes and raw buttons for non-standard pads', () => {
   const state = mapGamepad(gamepad(1, {
     axes: [-1, -0.5, 0, 0.5, 1, 2],

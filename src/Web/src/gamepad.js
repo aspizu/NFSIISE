@@ -113,7 +113,9 @@ export function createGamepadPoller(module, getGamepads = () => navigator.getGam
   function poll() {
     let gamepads;
     try {
-      gamepads = Array.from(getGamepads() ?? []).filter((gamepad) => gamepad?.connected !== false);
+      gamepads = Array.from(getGamepads() ?? []).filter(
+        (gamepad) => Boolean(gamepad) && gamepad.connected !== false,
+      );
     } catch {
       gamepads = [];
     }
