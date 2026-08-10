@@ -125,7 +125,7 @@ function compile_wasm
 		WASM_SHELL_FLAGS=(--shell-file Wasm/shell.html)
 		WASM_GAME_FLAGS=(--preload-file "../Need For Speed II SE@/NFSIISE")
 	fi
-	mkdir -p "$WASM_OBJ_DIR" || exit
+	mkdir -p "$WASM_BUILD_DIR" "$WASM_OBJ_DIR" || exit
 	rm -f "$WASM_OBJ_DIR"/*.o
 	rm -f "$WASM_BUILD_DIR/nfs2se.data" "$WASM_BUILD_DIR/nfs2se.html" \
 		"$WASM_BUILD_DIR/nfs2se.js" "$WASM_BUILD_DIR/nfs2se.wasm" \
