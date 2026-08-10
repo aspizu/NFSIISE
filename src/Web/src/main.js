@@ -10,6 +10,7 @@ const archiveInput = document.querySelector('#archive-input');
 const chooseArchiveButton = document.querySelector('#choose-archive');
 const replaceArchiveButton = document.querySelector('#replace-archive');
 const startGameButton = document.querySelector('#start-game');
+const resolutionSelect = document.querySelector('#resolution');
 const archiveDetail = document.querySelector('#archive-detail');
 const archiveProgress = document.querySelector('#archive-progress');
 const setupError = document.querySelector('#setup-error');
@@ -293,6 +294,13 @@ archiveInput.addEventListener('change', () => {
 startGameButton.addEventListener('click', () => {
   if (!archiveMounted || !settingsLoaded || !releaseStartupDependency)
     return;
+
+  const [width, height] = resolutionSelect.value.split('x').map(Number);
+  if (globalThis.Module._nfsWebSetResolution?.(width, height) !== 1) {
+    setError('Could not set the selected resolution.');
+    return;
+  }
+
   gameStarted = true;
   startAudio();
   setup.hidden = true;

@@ -5,6 +5,9 @@
 #include <SDL2/SDL.h>
 #include <signal.h>
 #include <sys/stat.h>
+#ifdef __EMSCRIPTEN__
+	#include <emscripten/emscripten.h>
+#endif
 #ifdef WIN32
 	#include <windows.h>
 #else
@@ -260,6 +263,20 @@ uint16_t PORT1 = 1030, PORT2 = 1029;
 #ifndef OPENGL1X
 BOOL fixedFramebufferSize = false;
 BOOL framebufferLinearFiltering = true;
+#endif
+
+#ifdef __EMSCRIPTEN__
+static int32_t webResolutionWidth;
+static int32_t webResolutionHeight;
+
+EMSCRIPTEN_KEEPALIVE int nfsWebSetResolution(int32_t width, int32_t height)
+{
+	if (width < 640 || height < 480 || width > 1920 || height > 1440)
+		return 0;
+	webResolutionWidth = width;
+	webResolutionHeight = height;
+	return 1;
+}
 #endif
 
 static void initializeSDL2()
@@ -542,6 +559,14 @@ void WrapperInit(void)
 #ifdef __EMSCRIPTEN__
 	/* Browsers allow fullscreen only after a user gesture. */
 	startInFullScreen = false;
+	if (webResolutionWidth && webResolutionHeight)
+	{
+		initialWinWidth = webResolutionWidth;
+		initialWinHeight = webResolutionHeight;
+#ifndef OPENGL1X
+		fixedFramebufferSize = true;
+#endif
+	}
 #endif
 
 #ifndef OPENGL1X

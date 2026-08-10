@@ -20,7 +20,8 @@ body,
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -84,6 +85,28 @@ code {
   color: #ddd;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 0.92em;
+}
+
+.resolution-setting {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: #aaa;
+  font-size: 12px;
+}
+
+select {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 5px;
+  color: #eee;
+  background: #202020;
+}
+
+select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .actions {
