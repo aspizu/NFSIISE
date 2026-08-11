@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -16,72 +16,7 @@
     <script vite-ignore src="./coi-serviceworker.js"></script>
   </head>
   <body>
-    <main id="app">
-      <canvas id="display" aria-hidden="true"></canvas>
-      <canvas id="canvas" tabindex="-1" aria-label="Need For Speed II SE game canvas"></canvas>
-      <button id="fullscreen" class="fullscreen-control secondary" type="button">Full screen</button>
-
-      <section id="setup" class="setup" aria-labelledby="setup-title">
-        <div class="setup-card">
-          <h1 id="setup-title">Need For Speed II SE</h1>
-          <p class="setup-copy">
-            Choose a ZIP with the Special Edition <code>fedata</code> and <code>gamedata</code> folders.
-          </p>
-
-          <input id="archive-input" type="file" accept=".zip,application/zip" hidden>
-          <label class="setup-setting" for="resolution">
-            <span>Resolution</span>
-            <select id="resolution">
-              <option value="640x480" selected>640 × 480</option>
-              <option value="800x600">800 × 600</option>
-              <option value="1024x768">1024 × 768</option>
-              <option value="1280x960">1280 × 960</option>
-              <option value="1600x1200">1600 × 1200</option>
-              <option value="1920x1440">1920 × 1440</option>
-            </select>
-          </label>
-          <label class="setup-setting" for="scaling">
-            <span>Scaling</span>
-            <select id="scaling">
-              <option value="nearest" selected>Nearest neighbor</option>
-              <option value="interpolation">Interpolation</option>
-            </select>
-          </label>
-          <label class="checkbox-setting" for="onscreen-keyboard-enabled">
-            <input id="onscreen-keyboard-enabled" type="checkbox">
-            <span>
-              <strong>On-screen keyboard</strong>
-              <small>Arrow keys, Enter, and Escape</small>
-            </span>
-          </label>
-          <div class="actions">
-            <button id="choose-archive" class="secondary" type="button">Choose ZIP</button>
-            <button id="replace-archive" class="secondary" type="button" hidden>Change ZIP</button>
-            <button id="start-game" class="primary" type="button" disabled>Start game</button>
-          </div>
-
-          <p id="archive-detail" class="archive-detail"></p>
-          <progress id="archive-progress" max="1" value="0" hidden></progress>
-          <p id="setup-error" class="error" role="alert"></p>
-        </div>
-      </section>
-
-      <section id="onscreen-keyboard" class="onscreen-keyboard" aria-label="On-screen keyboard" hidden>
-        <div class="direction-keys" aria-label="Driving and menu direction keys">
-          <button class="virtual-key key-up" type="button" data-code="ArrowUp" aria-label="Up: accelerate">↑</button>
-          <button class="virtual-key key-left" type="button" data-code="ArrowLeft" aria-label="Left: steer left">←</button>
-          <button class="virtual-key key-down" type="button" data-code="ArrowDown" aria-label="Down: brake">↓</button>
-          <button class="virtual-key key-right" type="button" data-code="ArrowRight" aria-label="Right: steer right">→</button>
-        </div>
-        <div class="action-keys" aria-label="Menu keys">
-          <button class="virtual-key text-key" type="button" data-code="Escape" aria-label="Escape: pause or go back">Esc</button>
-          <button class="virtual-key text-key enter-key" type="button" data-code="Enter" aria-label="Enter: select">Enter</button>
-        </div>
-      </section>
-
-      <div id="status" class="status" role="status">Loading WebAssembly…</div>
-    </main>
-
-    <script type="module" src="/src/main.js"></script>
+    <main id="app"></main>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -5,45 +5,57 @@ export const GAME_KEYS = Object.freeze({
   ArrowRight: { key: 'ArrowRight', keyCode: 39 },
   Enter: { key: 'Enter', keyCode: 13 },
   Escape: { key: 'Escape', keyCode: 27 },
-});
+} as const);
 
-export function keyboardEventOptions(code) {
-  const definition = GAME_KEYS[code];
-  if (!definition)
+export type GameKeyCode = keyof typeof GAME_KEYS;
+
+export function keyboardEventOptions(code: string): KeyboardEventInit & { keyCode: number; which: number } {
+  if (!(code in GAME_KEYS))
     throw new Error(`Unsupported on-screen key: ${code}`);
+
+  const gameCode = code as GameKeyCode;
+  const definition = GAME_KEYS[gameCode];
 
   return {
     bubbles: true,
     cancelable: true,
-    code,
+    code: gameCode,
     key: definition.key,
     keyCode: definition.keyCode,
     which: definition.keyCode,
   };
 }
 
-export function bindOnscreenKeyboard(container, target) {
-  const heldPointers = new Map();
-  const heldKeyCounts = new Map();
+interface HeldKey {
+  button: HTMLElement;
+  code: GameKeyCode;
+}
 
-  function dispatch(type, code) {
+export function bindOnscreenKeyboard(container: HTMLElement, target: HTMLElement) {
+  const heldPointers = new Map<number, HeldKey>();
+  const heldKeyCounts = new Map<GameKeyCode, number>();
+
+  function dispatch(type: 'keydown' | 'keyup', code: GameKeyCode): void {
     target.dispatchEvent(new KeyboardEvent(type, keyboardEventOptions(code)));
   }
 
-  function press(pointerId, button) {
+  function press(pointerId: number, button: HTMLElement): void {
     if (heldPointers.has(pointerId))
       return;
 
     const code = button.dataset.code;
-    const count = heldKeyCounts.get(code) ?? 0;
-    heldPointers.set(pointerId, { button, code });
-    heldKeyCounts.set(code, count + 1);
+    if (!code || !(code in GAME_KEYS))
+      return;
+    const gameCode = code as GameKeyCode;
+    const count = heldKeyCounts.get(gameCode) ?? 0;
+    heldPointers.set(pointerId, { button, code: gameCode });
+    heldKeyCounts.set(gameCode, count + 1);
     button.dataset.pressed = 'true';
     if (count === 0)
-      dispatch('keydown', code);
+      dispatch('keydown', gameCode);
   }
 
-  function release(pointerId) {
+  function release(pointerId: number): void {
     const held = heldPointers.get(pointerId);
     if (!held)
       return;
@@ -59,12 +71,12 @@ export function bindOnscreenKeyboard(container, target) {
     }
   }
 
-  function releaseAll() {
+  function releaseAll(): void {
     for (const pointerId of [...heldPointers.keys()])
       release(pointerId);
   }
 
-  for (const button of container.querySelectorAll('[data-code]')) {
+  for (const button of container.querySelectorAll<HTMLElement>('[data-code]')) {
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       target.focus({ preventScroll: true });

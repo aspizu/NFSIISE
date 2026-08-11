@@ -3,7 +3,15 @@ const DATABASE_VERSION = 1;
 const STORE_NAME = 'game-archives';
 const ARCHIVE_KEY = 'current-game-zip';
 
-function openDatabase() {
+export interface ArchiveRecord {
+  blob: Blob;
+  lastModified: number;
+  name: string;
+  savedAt: number;
+  size: number;
+}
+
+function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
@@ -15,21 +23,21 @@ function openDatabase() {
   });
 }
 
-function finishTransaction(transaction) {
+function finishTransaction(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
-    transaction.oncomplete = resolve;
+    transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
 }
 
-export async function getCachedArchive() {
+export async function getCachedArchive(): Promise<ArchiveRecord | null> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly');
     const completion = finishTransaction(transaction);
     const request = transaction.objectStore(STORE_NAME).get(ARCHIVE_KEY);
-    const record = await new Promise((resolve, reject) => {
+    const record = await new Promise<ArchiveRecord | null>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result ?? null);
       request.onerror = () => reject(request.error);
     });
@@ -40,7 +48,7 @@ export async function getCachedArchive() {
   }
 }
 
-export async function cacheArchive(record) {
+export async function cacheArchive(record: ArchiveRecord): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite');
@@ -51,7 +59,7 @@ export async function cacheArchive(record) {
   }
 }
 
-export async function clearCachedArchive() {
+export async function clearCachedArchive(): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite');

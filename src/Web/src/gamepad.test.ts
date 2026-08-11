@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { axisToInt16, createGamepadPoller, mapGamepad, triggerToInt16 } from './gamepad.js';
+import { axisToInt16, createGamepadPoller, mapGamepad, triggerToInt16 } from './gamepad.ts';
+import type { GamepadLike } from './gamepad.ts';
+import type { NfsModule } from './emscripten.ts';
 
-function button(value = 0, isPressed = value > 0.5) {
+function button(value = 0, isPressed = value > 0.5): Pick<GamepadButton, 'pressed' | 'value'> {
   return { pressed: isPressed, value };
 }
 
-function gamepad(index, { axes = [], buttons = [], mapping = 'standard' } = {}) {
+function gamepad(
+  index: number,
+  { axes = [], buttons = [], mapping = 'standard' }: Partial<Pick<GamepadLike, 'axes' | 'buttons' | 'mapping'>> = {},
+): GamepadLike {
   return { axes, buttons, connected: true, index, mapping };
 }
 
-function testModule() {
+function testModule(): Pick<NfsModule, 'HEAPU8' | '_nfsWebGamepadStateBuffer' | '_nfsWebGamepadStateWords'> {
   const buffer = new SharedArrayBuffer(1024);
   return {
     HEAPU8: new Uint8Array(buffer),
@@ -19,7 +24,7 @@ function testModule() {
   };
 }
 
-function readSlot(module, slot) {
+function readSlot(module: ReturnType<typeof testModule>, slot: number) {
   const words = new Int32Array(module.HEAPU8.buffer);
   const offset = (64 >>> 2) + slot * 11;
   return {
@@ -60,7 +65,7 @@ test('maps the standard gamepad layout to DirectInput values', () => {
 
 test('keeps two stable slots and clears lost pads', () => {
   const module = testModule();
-  let pads = [
+  let pads: GamepadLike[] = [
     gamepad(4, { axes: [-1] }),
     gamepad(9, { axes: [0.5] }),
   ];

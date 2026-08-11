@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 
 const isolationHeaders = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -8,7 +10,7 @@ const isolationHeaders = {
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
 
-const webAssets = [
+const webAssets: ReadonlyArray<readonly [string, string]> = [
   ['coi-serviceworker.js', './coi-serviceworker.js'],
   ['manifest.webmanifest', './manifest.webmanifest'],
   ['icons/nfs2se-32.png', './icons/nfs2se-32.png'],
@@ -16,7 +18,7 @@ const webAssets = [
   ['icons/nfs2se-512.png', './icons/nfs2se-512.png'],
 ];
 
-const emitWebAssets = {
+const emitWebAssets: Plugin = {
   name: 'emit-web-assets',
   apply: 'build',
   generateBundle() {
@@ -32,8 +34,13 @@ const emitWebAssets = {
 
 export default defineConfig({
   base: './',
-  plugins: [emitWebAssets],
+  plugins: [tailwindcss(), emitWebAssets],
   publicDir: fileURLToPath(new URL('../../build/web-public', import.meta.url)),
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     headers: isolationHeaders,
   },

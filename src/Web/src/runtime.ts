@@ -1,49 +1,67 @@
-import './style.css';
-import { cacheArchive, clearCachedArchive, getCachedArchive } from './archive-store.js';
-import { mountGameArchive } from './game-archive.js';
-import { startGamepadPolling } from './gamepad.js';
-import { bindOnscreenKeyboard } from './onscreen-keyboard.js';
+import { cacheArchive, clearCachedArchive, getCachedArchive } from './archive-store.ts';
+import { mountGameArchive } from './game-archive.ts';
+import { startGamepadPolling } from './gamepad.ts';
+import { bindOnscreenKeyboard } from './onscreen-keyboard.ts';
+import type { ArchiveRecord } from './archive-store.ts';
+import type { NfsModule, NfsModuleConfig } from './emscripten.ts';
 
-const canvas = document.querySelector('#canvas');
-const display = document.querySelector('#display');
-const setup = document.querySelector('#setup');
-const fullscreenButton = document.querySelector('#fullscreen');
-const archiveInput = document.querySelector('#archive-input');
-const chooseArchiveButton = document.querySelector('#choose-archive');
-const replaceArchiveButton = document.querySelector('#replace-archive');
-const startGameButton = document.querySelector('#start-game');
-const resolutionSelect = document.querySelector('#resolution');
-const scalingSelect = document.querySelector('#scaling');
-const onscreenKeyboardEnabled = document.querySelector('#onscreen-keyboard-enabled');
-const onscreenKeyboard = document.querySelector('#onscreen-keyboard');
-const archiveDetail = document.querySelector('#archive-detail');
-const archiveProgress = document.querySelector('#archive-progress');
-const setupError = document.querySelector('#setup-error');
-const status = document.querySelector('#status');
+function requireElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element)
+    throw new Error(`Required element is missing: ${selector}`);
+  return element;
+}
 
-const displayContext = display.getContext('2d', { alpha: false });
+const canvas = requireElement<HTMLCanvasElement>('#canvas');
+const display = requireElement<HTMLCanvasElement>('#display');
+const setup = requireElement<HTMLElement>('#setup');
+const fullscreenButton = requireElement<HTMLButtonElement>('#fullscreen');
+const fullscreenEnterIcon = requireElement<SVGElement>('#fullscreen-enter-icon');
+const fullscreenExitIcon = requireElement<SVGElement>('#fullscreen-exit-icon');
+const archiveInput = requireElement<HTMLInputElement>('#archive-input');
+const chooseArchiveButton = requireElement<HTMLButtonElement>('#choose-archive');
+const replaceArchiveButton = requireElement<HTMLButtonElement>('#replace-archive');
+const startGameButton = requireElement<HTMLButtonElement>('#start-game');
+const resolutionSelect = requireElement<HTMLElement>('#resolution');
+const scalingSelect = requireElement<HTMLElement>('#scaling');
+const onscreenKeyboardEnabled = requireElement<HTMLElement>('#onscreen-keyboard-enabled');
+const onscreenKeyboard = requireElement<HTMLElement>('#onscreen-keyboard');
+const archiveDetail = requireElement<HTMLElement>('#archive-detail');
+const setupError = requireElement<HTMLElement>('#setup-error');
+const status = requireElement<HTMLElement>('#status');
+
+function require2dContext(canvasElement: HTMLCanvasElement): CanvasRenderingContext2D {
+  const context = canvasElement.getContext('2d', { alpha: false });
+  if (!context)
+    throw new Error('This browser does not support the 2D canvas API.');
+  return context;
+}
+
+const displayContext = require2dContext(display);
 const staging = document.createElement('canvas');
-const stagingContext = staging.getContext('2d', { alpha: false });
+const stagingContext = require2dContext(staging);
 const onscreenKeyboardController = bindOnscreenKeyboard(onscreenKeyboard, canvas);
+const ESCAPE_HOLD_DURATION_MS = 800;
 
 let archiveMounted = false;
 let settingsLoaded = false;
 let mountInProgress = false;
 let failedMountNeedsReload = false;
 let gameStarted = false;
-let releaseStartupDependency = null;
+let releaseStartupDependency: (() => void) | null = null;
 let shownFrameSequence = 0;
-let framePixels = null;
+let framePixels: Uint8ClampedArray<ArrayBuffer> | null = null;
 let frameWidth = 0;
 let frameHeight = 0;
-let audioContext = null;
-let audioProcessor = null;
+let audioContext: AudioContext | null = null;
+let audioProcessor: ScriptProcessorNode | null = null;
 let audioReadFraction = 0;
-let audioMemory = null;
-let audioSamples = null;
-let audioIndices = null;
+let audioMemory: ArrayBufferLike | null = null;
+let audioSamples: Int16Array | null = null;
+let audioIndices: Uint32Array | null = null;
+let escapeHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
-function formatBytes(bytes) {
+function formatBytes(bytes: number): string {
   const units = ['B', 'KiB', 'MiB', 'GiB'];
   let value = bytes;
   let unit = units[0];
@@ -54,43 +72,55 @@ function formatBytes(bytes) {
   return `${value.toFixed(unit === 'B' ? 0 : 1)} ${unit}`;
 }
 
-function setStatus(message) {
+function setStatus(message: string): void {
   status.textContent = message;
 }
 
-function setError(message = '') {
+function setError(message = ''): void {
   setupError.textContent = message;
 }
 
-function refreshFullscreenButton() {
+function refreshFullscreenButton(): void {
   const active = Boolean(document.fullscreenElement);
-  fullscreenButton.textContent = active ? 'Exit full screen' : 'Full screen';
+  const label = active ? 'Exit full screen' : 'Enter full screen';
+  fullscreenEnterIcon.toggleAttribute('hidden', active);
+  fullscreenExitIcon.toggleAttribute('hidden', !active);
+  fullscreenButton.setAttribute('aria-label', label);
+  fullscreenButton.title = label;
   fullscreenButton.setAttribute('aria-pressed', String(active));
 }
 
-function resizeGameSurfaces() {
+function resizeGameSurfaces(): void {
   if (!frameWidth || !frameHeight)
     return;
 
-  const scale = Math.min(window.innerWidth / frameWidth, window.innerHeight / frameHeight);
+  const viewportWidth = window.visualViewport?.width ?? document.documentElement.clientWidth;
+  const viewportHeight = window.visualViewport?.height ?? document.documentElement.clientHeight;
+  const scale = Math.min(viewportWidth / frameWidth, viewportHeight / frameHeight);
   const width = `${frameWidth * scale}px`;
   const height = `${frameHeight * scale}px`;
   canvas.style.width = display.style.width = width;
   canvas.style.height = display.style.height = height;
 }
 
-function refreshScalingMethod() {
-  display.dataset.scaling = scalingSelect.value;
+function refreshScalingMethod(): void {
+  display.dataset.scaling = scalingSelect.dataset.value ?? 'nearest';
 }
 
-function refreshOnscreenKeyboard() {
-  const visible = gameStarted && onscreenKeyboardEnabled.checked;
+function refreshOnscreenKeyboard(): void {
+  const visible = gameStarted && onscreenKeyboardEnabled.dataset.state === 'checked';
   onscreenKeyboard.hidden = !visible;
   if (!visible)
     onscreenKeyboardController.releaseAll();
 }
 
-function fillAudioBuffer(event) {
+function setArchiveProgress(value: number, visible: boolean): void {
+  window.dispatchEvent(new CustomEvent('nfs-archive-progress', {
+    detail: { value, visible },
+  }));
+}
+
+function fillAudioBuffer(event: AudioProcessingEvent): void {
   const left = event.outputBuffer.getChannelData(0);
   const right = event.outputBuffer.getChannelData(1);
   left.fill(0);
@@ -111,6 +141,8 @@ function fillAudioBuffer(event) {
     audioSamples = new Int16Array(memory);
     audioIndices = new Uint32Array(memory);
   }
+  if (!audioSamples || !audioIndices || !audioContext)
+    return;
 
   let readIndex = Atomics.load(audioIndices, readPointer >>> 2);
   const rateRatio = sampleRate / audioContext.sampleRate;
@@ -127,8 +159,8 @@ function fillAudioBuffer(event) {
     const secondSample = secondFrame * 2 + (ringPointer >>> 1);
     const mix = audioReadFraction;
 
-    left[outputIndex] = (audioSamples[firstSample] * (1 - mix) + audioSamples[secondSample] * mix) / 32768;
-    right[outputIndex] = (audioSamples[firstSample + 1] * (1 - mix) + audioSamples[secondSample + 1] * mix) / 32768;
+    left[outputIndex] = (audioSamples[firstSample]! * (1 - mix) + audioSamples[secondSample]! * mix) / 32768;
+    right[outputIndex] = (audioSamples[firstSample + 1]! * (1 - mix) + audioSamples[secondSample + 1]! * mix) / 32768;
 
     audioReadFraction += rateRatio;
     const consumedFrames = Math.floor(audioReadFraction);
@@ -139,16 +171,16 @@ function fillAudioBuffer(event) {
   Atomics.store(audioIndices, readPointer >>> 2, readIndex);
 }
 
-function startAudio() {
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) {
+function startAudio(): void {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
     setStatus('Sound is not supported by this browser.');
     return;
   }
 
   try {
     if (!audioContext) {
-      audioContext = new AudioContext({ latencyHint: 'interactive' });
+      audioContext = new AudioContextClass({ latencyHint: 'interactive' });
       audioProcessor = audioContext.createScriptProcessor(1024, 0, 2);
       audioProcessor.onaudioprocess = fillAudioBuffer;
       audioProcessor.connect(audioContext.destination);
@@ -163,7 +195,7 @@ function startAudio() {
   }
 }
 
-function refreshControls() {
+function refreshControls(): void {
   const ready = archiveMounted && settingsLoaded && !mountInProgress;
   startGameButton.disabled = !ready || gameStarted;
   chooseArchiveButton.disabled = mountInProgress;
@@ -172,8 +204,9 @@ function refreshControls() {
   chooseArchiveButton.hidden = archiveMounted;
 }
 
-function showWebFrame() {
-  const sequenceBefore = globalThis.Module._nfsWebFrameSequence?.();
+function showWebFrame(): void {
+  const frameSequence = globalThis.Module._nfsWebFrameSequence;
+  const sequenceBefore = frameSequence?.();
   if (sequenceBefore && !(sequenceBefore & 1) && sequenceBefore !== shownFrameSequence) {
     const framePointer = globalThis.Module._nfsWebFrameBuffer();
     const width = globalThis.Module._nfsWebFrameWidth();
@@ -185,7 +218,7 @@ function showWebFrame() {
         framePixels = new Uint8ClampedArray(size);
       framePixels.set(globalThis.Module.HEAPU8.subarray(framePointer, framePointer + size));
 
-      const sequenceAfter = globalThis.Module._nfsWebFrameSequence();
+      const sequenceAfter = frameSequence!();
       if (sequenceBefore === sequenceAfter) {
         if (display.width !== width || display.height !== height) {
           display.width = staging.width = width;
@@ -204,30 +237,28 @@ function showWebFrame() {
   requestAnimationFrame(showWebFrame);
 }
 
-async function mountArchive(record, shouldCache) {
+async function mountArchive(record: ArchiveRecord, shouldCache: boolean): Promise<void> {
   mountInProgress = true;
   setError();
-  archiveProgress.hidden = false;
-  archiveProgress.value = 0;
+  setArchiveProgress(0, true);
   archiveDetail.textContent = `Reading ${record.name} (${formatBytes(record.blob.size)})…`;
   refreshControls();
 
   try {
     const result = await mountGameArchive(record.blob, globalThis.Module.FS, (progress) => {
-      archiveProgress.value = progress.archiveBytesRead / progress.archiveBytesTotal;
+      setArchiveProgress(progress.archiveBytesRead / progress.archiveBytesTotal, true);
       archiveDetail.textContent = `Expanding ${record.name}: ${progress.mountedFiles} files`;
     });
     if (shouldCache)
       await cacheArchive(record);
 
     archiveMounted = true;
-    archiveProgress.value = 1;
-    archiveProgress.hidden = true;
-    archiveDetail.textContent = `${record.name}: ${result.mountedFiles} files, ${formatBytes(result.mountedBytes)} ready`;
+    setArchiveProgress(1, false);
+    archiveDetail.textContent = formatBytes(result.mountedBytes);
     setStatus('');
   } catch (error) {
     failedMountNeedsReload = true;
-    archiveProgress.hidden = true;
+    setArchiveProgress(0, false);
     archiveDetail.textContent = '';
     setError(error instanceof Error ? error.message : String(error));
     if (!shouldCache)
@@ -238,7 +269,7 @@ async function mountArchive(record, shouldCache) {
   }
 }
 
-async function loadCachedArchive() {
+async function loadCachedArchive(): Promise<void> {
   try {
     const cached = await getCachedArchive();
     if (cached?.blob instanceof Blob) {
@@ -252,7 +283,7 @@ async function loadCachedArchive() {
   refreshControls();
 }
 
-async function handleArchiveSelection(file) {
+async function handleArchiveSelection(file: File | undefined): Promise<void> {
   if (!file)
     return;
   if (!file.name.toLowerCase().endsWith('.zip')) {
@@ -276,7 +307,7 @@ async function handleArchiveSelection(file) {
   await mountArchive(record, true);
 }
 
-function initializeFileSystems(module) {
+function initializeFileSystems(module: NfsModule): void {
   const FS = module.FS;
   const startupDependency = 'nfs2se-web-startup';
   module.addRunDependency(startupDependency);
@@ -297,14 +328,14 @@ function initializeFileSystems(module) {
 
 globalThis.Module = {
   canvas,
-  locateFile(path) {
+  locateFile(path: string) {
     return new URL(`./game/${path}`, document.baseURI).href;
   },
   preRun: [initializeFileSystems],
   print: console.log,
   printErr: console.error,
   setStatus,
-  monitorRunDependencies(left) {
+  monitorRunDependencies(left: number) {
     if (!archiveMounted && !mountInProgress)
       setStatus(left ? `Loading WebAssembly… (${left})` : '');
   },
@@ -313,13 +344,13 @@ globalThis.Module = {
     startGamepadPolling(globalThis.Module);
     requestAnimationFrame(showWebFrame);
   },
-  onAbort(reason) {
+  onAbort(reason: unknown) {
     setError(`The game stopped: ${reason}`);
     onscreenKeyboard.hidden = true;
     onscreenKeyboardController.releaseAll();
     setup.hidden = false;
   },
-};
+} as NfsModule & NfsModuleConfig;
 
 chooseArchiveButton.addEventListener('click', () => archiveInput.click());
 replaceArchiveButton.addEventListener('click', () => archiveInput.click());
@@ -331,11 +362,17 @@ startGameButton.addEventListener('click', () => {
   if (!archiveMounted || !settingsLoaded || !releaseStartupDependency)
     return;
 
-  const [width, height] = resolutionSelect.value.split('x').map(Number);
+  const [width = 0, height = 0] = (resolutionSelect.dataset.value ?? '').split('x').map(Number);
   if (globalThis.Module._nfsWebSetResolution?.(width, height) !== 1) {
     setError('Could not set the selected resolution.');
     return;
   }
+
+  const pixelRatio = window.devicePixelRatio || 1;
+  canvas.width = width;
+  canvas.height = height;
+  canvas.style.width = `${width / pixelRatio}px`;
+  canvas.style.height = `${height / pixelRatio}px`;
 
   gameStarted = true;
   startAudio();
@@ -351,17 +388,51 @@ fullscreenButton.addEventListener('click', async () => {
   try {
     if (document.fullscreenElement)
       await document.exitFullscreen();
-    else
+    else {
       await document.documentElement.requestFullscreen();
+      try {
+        await navigator.keyboard?.lock(['Escape']);
+      } catch (error) {
+        console.warn('Could not lock Escape in full screen:', error);
+      }
+    }
   } catch (error) {
     setError(`Could not enter full screen: ${error}`);
   }
 });
-document.addEventListener('fullscreenchange', refreshFullscreenButton);
+
+function clearEscapeHold(): void {
+  if (escapeHoldTimer === null)
+    return;
+  clearTimeout(escapeHoldTimer);
+  escapeHoldTimer = null;
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.code !== 'Escape' || event.repeat || !document.fullscreenElement || escapeHoldTimer !== null)
+    return;
+
+  escapeHoldTimer = setTimeout(() => {
+    escapeHoldTimer = null;
+    void document.exitFullscreen().catch((error) => setError(`Could not exit full screen: ${error}`));
+  }, ESCAPE_HOLD_DURATION_MS);
+});
+document.addEventListener('keyup', (event) => {
+  if (event.code === 'Escape')
+    clearEscapeHold();
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    clearEscapeHold();
+    navigator.keyboard?.unlock();
+  }
+  refreshFullscreenButton();
+});
 window.addEventListener('resize', resizeGameSurfaces);
+window.visualViewport?.addEventListener('resize', resizeGameSurfaces);
 window.addEventListener('error', (event) => setError(event.message || 'The game stopped with an error.'));
-scalingSelect.addEventListener('change', refreshScalingMethod);
-onscreenKeyboardEnabled.addEventListener('change', refreshOnscreenKeyboard);
+window.addEventListener('nfs-scaling-change', refreshScalingMethod);
+window.addEventListener('nfs-onscreen-keyboard-change', refreshOnscreenKeyboard);
 
 if (!document.fullscreenEnabled)
   fullscreenButton.hidden = true;

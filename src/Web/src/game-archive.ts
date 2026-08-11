@@ -1,9 +1,10 @@
 import { Unzip, UnzipInflate } from 'fflate';
+import type { EmscriptenFileSystem } from './emscripten.ts';
 
 const MAX_FILES = 5000;
 const MAX_UNCOMPRESSED_BYTES = 800 * 1024 * 1024;
 
-function toVirtualPath(archivePath) {
+function toVirtualPath(archivePath: string): string | null {
   const parts = archivePath.replaceAll('\\', '/').split('/').filter(Boolean);
   if (parts.some((part) => part === '.' || part === '..' || part.includes('\0')))
     throw new Error(`Unsafe path in ZIP: ${archivePath}`);
@@ -19,9 +20,9 @@ function toVirtualPath(archivePath) {
   return `/NFSIISE/${gameParts.join('/')}`;
 }
 
-function joinChunks(chunks, length) {
+function joinChunks(chunks: Uint8Array[], length: number): Uint8Array {
   if (chunks.length === 1)
-    return chunks[0];
+    return chunks[0]!;
 
   const joined = new Uint8Array(length);
   let offset = 0;
@@ -32,7 +33,7 @@ function joinChunks(chunks, length) {
   return joined;
 }
 
-function addFileToEmscripten(FS, path, contents) {
+function addFileToEmscripten(FS: EmscriptenFileSystem, path: string, contents: Uint8Array): void {
   const separator = path.lastIndexOf('/');
   const parent = path.slice(0, separator);
   const name = path.slice(separator + 1);
@@ -40,13 +41,28 @@ function addFileToEmscripten(FS, path, contents) {
   FS.createDataFile(parent, name, contents, true, false, true);
 }
 
-export async function mountGameArchive(blob, FS, onProgress) {
-  const mountedPaths = new Set();
+export interface ArchiveProgress {
+  archiveBytesRead: number;
+  archiveBytesTotal: number;
+  mountedFiles: number;
+}
+
+export interface MountedArchive {
+  mountedBytes: number;
+  mountedFiles: number;
+}
+
+export async function mountGameArchive(
+  blob: Blob,
+  FS: EmscriptenFileSystem,
+  onProgress: (progress: ArchiveProgress) => void,
+): Promise<MountedArchive> {
+  const mountedPaths = new Set<string>();
   let archiveBytesRead = 0;
   let activeFiles = 0;
   let mountedFiles = 0;
   let mountedBytes = 0;
-  let extractionError = null;
+  let extractionError: unknown = null;
 
   const unzip = new Unzip((file) => {
     if (extractionError || file.name.endsWith('/'))
@@ -72,7 +88,7 @@ export async function mountGameArchive(blob, FS, onProgress) {
 
     mountedPaths.add(virtualPath);
     activeFiles += 1;
-    const chunks = [];
+    const chunks: Uint8Array[] = [];
     let fileLength = 0;
 
     file.ondata = (error, chunk, final) => {
