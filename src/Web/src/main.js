@@ -12,6 +12,7 @@ const chooseArchiveButton = document.querySelector('#choose-archive');
 const replaceArchiveButton = document.querySelector('#replace-archive');
 const startGameButton = document.querySelector('#start-game');
 const resolutionSelect = document.querySelector('#resolution');
+const scalingSelect = document.querySelector('#scaling');
 const archiveDetail = document.querySelector('#archive-detail');
 const archiveProgress = document.querySelector('#archive-progress');
 const setupError = document.querySelector('#setup-error');
@@ -29,6 +30,8 @@ let gameStarted = false;
 let releaseStartupDependency = null;
 let shownFrameSequence = 0;
 let framePixels = null;
+let frameWidth = 0;
+let frameHeight = 0;
 let audioContext = null;
 let audioProcessor = null;
 let audioReadFraction = 0;
@@ -59,6 +62,21 @@ function refreshFullscreenButton() {
   const active = Boolean(document.fullscreenElement);
   fullscreenButton.textContent = active ? 'Exit full screen' : 'Full screen';
   fullscreenButton.setAttribute('aria-pressed', String(active));
+}
+
+function resizeGameSurfaces() {
+  if (!frameWidth || !frameHeight)
+    return;
+
+  const scale = Math.min(window.innerWidth / frameWidth, window.innerHeight / frameHeight);
+  const width = `${frameWidth * scale}px`;
+  const height = `${frameHeight * scale}px`;
+  canvas.style.width = display.style.width = width;
+  canvas.style.height = display.style.height = height;
+}
+
+function refreshScalingMethod() {
+  display.dataset.scaling = scalingSelect.value;
 }
 
 function fillAudioBuffer(event) {
@@ -161,6 +179,9 @@ function showWebFrame() {
         if (display.width !== width || display.height !== height) {
           display.width = staging.width = width;
           display.height = staging.height = height;
+          frameWidth = width;
+          frameHeight = height;
+          resizeGameSurfaces();
         }
         stagingContext.putImageData(new ImageData(framePixels, width, height), 0, 0);
         displayContext.setTransform(1, 0, 0, -1, 0, height);
@@ -323,11 +344,14 @@ fullscreenButton.addEventListener('click', async () => {
   }
 });
 document.addEventListener('fullscreenchange', refreshFullscreenButton);
+window.addEventListener('resize', resizeGameSurfaces);
 window.addEventListener('error', (event) => setError(event.message || 'The game stopped with an error.'));
+scalingSelect.addEventListener('change', refreshScalingMethod);
 
 if (!document.fullscreenEnabled)
   fullscreenButton.hidden = true;
 refreshFullscreenButton();
+refreshScalingMethod();
 
 if (!crossOriginIsolated) {
   setError('This site needs Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for WebAssembly threads.');

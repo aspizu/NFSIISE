@@ -8,23 +8,31 @@ const isolationHeaders = {
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
 
-const serviceWorkerPath = fileURLToPath(new URL('./coi-serviceworker.js', import.meta.url));
+const webAssets = [
+  ['coi-serviceworker.js', './coi-serviceworker.js'],
+  ['manifest.webmanifest', './manifest.webmanifest'],
+  ['icons/nfs2se-32.png', './icons/nfs2se-32.png'],
+  ['icons/nfs2se-192.png', './icons/nfs2se-192.png'],
+  ['icons/nfs2se-512.png', './icons/nfs2se-512.png'],
+];
 
-const emitIsolationServiceWorker = {
-  name: 'emit-isolation-service-worker',
+const emitWebAssets = {
+  name: 'emit-web-assets',
   apply: 'build',
   generateBundle() {
-    this.emitFile({
-      type: 'asset',
-      fileName: 'coi-serviceworker.js',
-      source: readFileSync(serviceWorkerPath, 'utf8'),
-    });
+    for (const [fileName, sourcePath] of webAssets) {
+      this.emitFile({
+        type: 'asset',
+        fileName,
+        source: readFileSync(fileURLToPath(new URL(sourcePath, import.meta.url))),
+      });
+    }
   },
 };
 
 export default defineConfig({
   base: './',
-  plugins: [emitIsolationServiceWorker],
+  plugins: [emitWebAssets],
   publicDir: fileURLToPath(new URL('../../build/web-public', import.meta.url)),
   server: {
     headers: isolationHeaders,

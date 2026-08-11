@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#090a0c">
+    <meta name="description" content="Play Need For Speed II Special Edition in your browser.">
+    <meta name="application-name" content="NFS II SE">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="NFS II SE">
+    <link vite-ignore rel="manifest" href="./manifest.webmanifest">
+    <link vite-ignore rel="icon" type="image/png" sizes="32x32" href="./icons/nfs2se-32.png">
+    <link vite-ignore rel="apple-touch-icon" sizes="192x192" href="./icons/nfs2se-192.png">
     <title>Need For Speed II SE</title>
     <script vite-ignore src="./coi-serviceworker.js"></script>
   </head>
@@ -21,7 +29,7 @@
           </p>
 
           <input id="archive-input" type="file" accept=".zip,application/zip" hidden>
-          <label class="resolution-setting" for="resolution">
+          <label class="setup-setting" for="resolution">
             <span>Resolution</span>
             <select id="resolution">
               <option value="640x480" selected>640 × 480</option>
@@ -30,6 +38,13 @@
               <option value="1280x960">1280 × 960</option>
               <option value="1600x1200">1600 × 1200</option>
               <option value="1920x1440">1920 × 1440</option>
+            </select>
+          </label>
+          <label class="setup-setting" for="scaling">
+            <span>Scaling</span>
+            <select id="scaling">
+              <option value="nearest" selected>Nearest neighbor</option>
+              <option value="interpolation">Interpolation</option>
             </select>
           </label>
           <div class="actions">
