@@ -47,6 +47,13 @@
               <option value="interpolation">Interpolation</option>
             </select>
           </label>
+          <label class="checkbox-setting" for="onscreen-keyboard-enabled">
+            <input id="onscreen-keyboard-enabled" type="checkbox">
+            <span>
+              <strong>On-screen keyboard</strong>
+              <small>Arrow keys, Enter, and Escape</small>
+            </span>
+          </label>
           <div class="actions">
             <button id="choose-archive" class="secondary" type="button">Choose ZIP</button>
             <button id="replace-archive" class="secondary" type="button" hidden>Change ZIP</button>
@@ -56,6 +63,19 @@
           <p id="archive-detail" class="archive-detail"></p>
           <progress id="archive-progress" max="1" value="0" hidden></progress>
           <p id="setup-error" class="error" role="alert"></p>
+        </div>
+      </section>
+
+      <section id="onscreen-keyboard" class="onscreen-keyboard" aria-label="On-screen keyboard" hidden>
+        <div class="direction-keys" aria-label="Driving and menu direction keys">
+          <button class="virtual-key key-up" type="button" data-code="ArrowUp" aria-label="Up: accelerate">↑</button>
+          <button class="virtual-key key-left" type="button" data-code="ArrowLeft" aria-label="Left: steer left">←</button>
+          <button class="virtual-key key-down" type="button" data-code="ArrowDown" aria-label="Down: brake">↓</button>
+          <button class="virtual-key key-right" type="button" data-code="ArrowRight" aria-label="Right: steer right">→</button>
+        </div>
+        <div class="action-keys" aria-label="Menu keys">
+          <button class="virtual-key text-key" type="button" data-code="Escape" aria-label="Escape: pause or go back">Esc</button>
+          <button class="virtual-key text-key enter-key" type="button" data-code="Enter" aria-label="Enter: select">Enter</button>
         </div>
       </section>
 

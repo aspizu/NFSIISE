@@ -2,6 +2,7 @@ import './style.css';
 import { cacheArchive, clearCachedArchive, getCachedArchive } from './archive-store.js';
 import { mountGameArchive } from './game-archive.js';
 import { startGamepadPolling } from './gamepad.js';
+import { bindOnscreenKeyboard } from './onscreen-keyboard.js';
 
 const canvas = document.querySelector('#canvas');
 const display = document.querySelector('#display');
@@ -13,6 +14,8 @@ const replaceArchiveButton = document.querySelector('#replace-archive');
 const startGameButton = document.querySelector('#start-game');
 const resolutionSelect = document.querySelector('#resolution');
 const scalingSelect = document.querySelector('#scaling');
+const onscreenKeyboardEnabled = document.querySelector('#onscreen-keyboard-enabled');
+const onscreenKeyboard = document.querySelector('#onscreen-keyboard');
 const archiveDetail = document.querySelector('#archive-detail');
 const archiveProgress = document.querySelector('#archive-progress');
 const setupError = document.querySelector('#setup-error');
@@ -21,6 +24,7 @@ const status = document.querySelector('#status');
 const displayContext = display.getContext('2d', { alpha: false });
 const staging = document.createElement('canvas');
 const stagingContext = staging.getContext('2d', { alpha: false });
+const onscreenKeyboardController = bindOnscreenKeyboard(onscreenKeyboard, canvas);
 
 let archiveMounted = false;
 let settingsLoaded = false;
@@ -77,6 +81,13 @@ function resizeGameSurfaces() {
 
 function refreshScalingMethod() {
   display.dataset.scaling = scalingSelect.value;
+}
+
+function refreshOnscreenKeyboard() {
+  const visible = gameStarted && onscreenKeyboardEnabled.checked;
+  onscreenKeyboard.hidden = !visible;
+  if (!visible)
+    onscreenKeyboardController.releaseAll();
 }
 
 function fillAudioBuffer(event) {
@@ -304,6 +315,8 @@ globalThis.Module = {
   },
   onAbort(reason) {
     setError(`The game stopped: ${reason}`);
+    onscreenKeyboard.hidden = true;
+    onscreenKeyboardController.releaseAll();
     setup.hidden = false;
   },
 };
@@ -327,6 +340,7 @@ startGameButton.addEventListener('click', () => {
   gameStarted = true;
   startAudio();
   setup.hidden = true;
+  refreshOnscreenKeyboard();
   canvas.focus();
   releaseStartupDependency();
   releaseStartupDependency = null;
@@ -347,6 +361,7 @@ document.addEventListener('fullscreenchange', refreshFullscreenButton);
 window.addEventListener('resize', resizeGameSurfaces);
 window.addEventListener('error', (event) => setError(event.message || 'The game stopped with an error.'));
 scalingSelect.addEventListener('change', refreshScalingMethod);
+onscreenKeyboardEnabled.addEventListener('change', refreshOnscreenKeyboard);
 
 if (!document.fullscreenEnabled)
   fullscreenButton.hidden = true;
