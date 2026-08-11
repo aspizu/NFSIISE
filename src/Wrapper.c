@@ -271,7 +271,7 @@ static int32_t webResolutionHeight;
 
 EMSCRIPTEN_KEEPALIVE int nfsWebSetResolution(int32_t width, int32_t height)
 {
-	if (width < 640 || height < 480 || width > 1920 || height > 1440)
+	if (width < 320 || height < 240 || width > 1920 || height > 1440)
 		return 0;
 	webResolutionWidth = width;
 	webResolutionHeight = height;

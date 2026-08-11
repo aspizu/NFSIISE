@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/select';
 
 const resolutions = [
+  ['320x240', '320 × 240'],
+  ['480x360', '480 × 360'],
   ['640x480', '640 × 480'],
   ['800x600', '800 × 600'],
   ['1024x768', '1024 × 768'],
@@ -148,15 +150,15 @@ function App() {
       </section>
 
       <section id="onscreen-keyboard" className="onscreen-keyboard fixed inset-0 z-40 select-none" aria-label="On-screen keyboard" hidden>
+        <div className="menu-key-layout" aria-label="Menu keys">
+          <Button className="virtual-key function-key text-key" type="button" variant="outline" data-code="Escape" aria-label="Escape: pause or go back"><CircleX /><span>Esc</span></Button>
+          <Button className="virtual-key text-key enter-key" type="button" variant="outline" data-code="Enter" aria-label="Enter: select"><CornerDownLeft /><span>Enter</span></Button>
+        </div>
+
         <div className="game-key-layout">
           <div className="key-bank key-bank-left" aria-label="Steering keys">
             <Button className="virtual-key" type="button" variant="outline" data-code="ArrowLeft" aria-label="Left: steer left"><ArrowLeft /></Button>
             <Button className="virtual-key" type="button" variant="outline" data-code="ArrowRight" aria-label="Right: steer right"><ArrowRight /></Button>
-          </div>
-
-          <div className="key-bank key-bank-middle" aria-label="Menu keys">
-            <Button className="virtual-key text-key" type="button" variant="outline" data-code="Escape" aria-label="Escape: pause or go back"><CircleX /><span>Esc</span></Button>
-            <Button className="virtual-key text-key enter-key" type="button" variant="outline" data-code="Enter" aria-label="Enter: select"><CornerDownLeft /><span>Enter</span></Button>
           </div>
 
           <div className="key-bank key-bank-right" aria-label="Accelerate and brake keys">
